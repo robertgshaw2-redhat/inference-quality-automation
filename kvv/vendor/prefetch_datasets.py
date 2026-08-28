@@ -1,47 +1,70 @@
-#!/usr/bin/env python3
-"""Populate benchmark dataset caches, for use at image build time.
+"""Materialize benchmark datasets into the image so evals can run offline.
 
-Constructing each Task downloads its dataset into the cache steered by
-XDG_CACHE_HOME / HF_HOME (aime2025, ocrbench via inspect_ai's hf_dataset;
-mmmu via the datasets library; bfcl into inspect_evals' cache), so eval
-runs need no Hugging Face or GitHub access.
-
-Usage: python prefetch_datasets.py [aime2025|ocrbench|mmmu|bfcl ...]
+Run at image build time. Warms the caches the benchmarks read from:
+`inspect_ai`'s `hf_dataset` disk cache (aime2025, ocrbench), the
+`datasets` cache (mmmu, which calls `load_dataset` directly), and
+`inspect_evals`' cache (bfcl).
 """
 
+import argparse
 import sys
 
+BENCHMARKS = ("aime2025", "ocrbench", "mmmu", "bfcl")
 
-def prefetch(bench: str) -> None:
-    if bench == "aime2025":
-        from aime2025 import aime2025
 
-        aime2025()
-    elif bench == "ocrbench":
-        from ocr_bench import ocrbench
+def prefetch_aime2025() -> int:
+    from aime2025 import aime2025
 
-        ocrbench()
-    elif bench == "mmmu":
-        from mmmu_pro_vision import mmmu_pro_10c
+    return len(aime2025().dataset)
 
-        mmmu_pro_10c()
-    elif bench == "bfcl":
-        from bfcl_multi_turn import bfcl_multi_turn
 
-        bfcl_multi_turn()
-    else:
-        raise SystemExit(
-            f"unknown benchmark {bench!r}; expected aime2025, ocrbench, mmmu, or bfcl"
-        )
+def prefetch_ocrbench() -> int:
+    from ocr_bench import ocrbench
+
+    return len(ocrbench().dataset)
+
+
+def prefetch_mmmu() -> int:
+    from datasets import load_dataset
+
+    from mmmu_pro_vision import MMMU_PRO_10c_DATASET, MMMU_PRO_10c_SUBSET
+
+    # Only warm the `datasets` cache; converting rows to samples decodes every
+    # image and buys nothing that is not redone at eval time anyway.
+    return len(load_dataset(MMMU_PRO_10c_DATASET, MMMU_PRO_10c_SUBSET, split="test"))
+
+
+def prefetch_bfcl() -> int:
+    from bfcl_multi_turn import bfcl_multi_turn
+
+    return len(bfcl_multi_turn().dataset)
+
+
+PREFETCHERS = {
+    "aime2025": prefetch_aime2025,
+    "ocrbench": prefetch_ocrbench,
+    "mmmu": prefetch_mmmu,
+    "bfcl": prefetch_bfcl,
+}
 
 
 def main() -> None:
-    benchmarks = sys.argv[1:]
-    if not benchmarks:
-        raise SystemExit("usage: prefetch_datasets.py <benchmark> [...]")
-    for bench in benchmarks:
-        print(f"=== prefetching {bench} ===")
-        prefetch(bench)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "benchmarks",
+        nargs="*",
+        default=list(BENCHMARKS),
+        choices=list(BENCHMARKS),
+        help="Benchmarks to prefetch (default: all)",
+    )
+    args = parser.parse_args()
+
+    for bench in args.benchmarks or BENCHMARKS:
+        print(f"--- prefetching {bench} ---", flush=True)
+        count = PREFETCHERS[bench]()
+        print(f"--- {bench}: {count} samples cached ---", flush=True)
+
+    print("all datasets cached", file=sys.stderr)
 
 
 if __name__ == "__main__":
