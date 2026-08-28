@@ -9,6 +9,7 @@ from ocr_bench import ocrbench
 
 import kimi_model  # noqa: F401 - registers kimi model API
 
+
 BENCHMARKS = {
     "ocrbench": ocrbench,
     "mmmu": mmmu_pro_10c,
@@ -67,6 +68,9 @@ def run_eval(
     temperature: float | None = None,
     top_p: float | None = None,
     thinking_effort: str | None = None,
+    log_dir: str | None = None,
+    log_buffer: int | None = None,
+    display: str | None = None,
     **overrides,
 ):
     """Run a single benchmark evaluation."""
@@ -87,6 +91,8 @@ def run_eval(
     print(f"stream={stream}, extra_body={extra_body}")
     print(f"{'='*60}\n")
 
+    print(f"{model=}")
+
     eval(
         [task],
         [model],
@@ -94,9 +100,11 @@ def run_eval(
         max_connections=max_connections,
         epochs=epochs,
         extra_body=extra_body,
-        retry_on_error=3,
         continue_on_fail=True,
         fail_on_error=False,
+        log_dir=log_dir,
+        log_buffer=log_buffer,
+        display=display,
         temperature=temperature,
         top_p=top_p,
         model_args={
@@ -182,6 +190,23 @@ def main():
             "thinking.effort=<value>."
         ),
     )
+    parser.add_argument(
+        "--log-dir",
+        default=None,
+        help="Directory for .eval logs (default: INSPECT_LOG_DIR or ./logs)",
+    )
+    parser.add_argument(
+        "--log-buffer",
+        type=int,
+        default=1,
+        help="Samples to buffer before flushing the log (default: 10; use 1 for live partial results)",
+    )
+    parser.add_argument(
+        "--display",
+        choices=["full", "conversation", "rich", "plain", "log", "none"],
+        default=None,
+        help="Progress display (default: full; use plain for non-TTY logs)",
+    )
     args = parser.parse_args()
 
     overrides = {}
@@ -201,6 +226,9 @@ def main():
         args.temperature,
         args.top_p,
         args.thinking_effort,
+        log_dir=args.log_dir,
+        log_buffer=args.log_buffer,
+        display=args.display,
         **overrides,
     )
 
