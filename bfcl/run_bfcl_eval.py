@@ -22,6 +22,9 @@ Examples:
 
     # Responses API instead of chat completions
     python run_bfcl_eval.py --api-type responses --output-dir ./bfcl-responses
+
+    # Smoke test: only the first 5 entries of each test category
+    python run_bfcl_eval.py --num-prompts 5
 """
 
 from __future__ import annotations
@@ -54,6 +57,11 @@ def parse_args() -> argparse.Namespace:
         "the server's /v1/models endpoint.",
     )
     parser.add_argument(
+        "--api-key",
+        default=os.environ.get("OPENAI_API_KEY", "dummy"),
+        help="API key sent to the server (default: $OPENAI_API_KEY or 'dummy')",
+    )
+    parser.add_argument(
         "--api-type",
         choices=["chat_completions", "responses", "messages"],
         default="chat_completions",
@@ -67,10 +75,18 @@ def parse_args() -> argparse.Namespace:
         "space-separated values or a single comma-separated string.",
     )
     parser.add_argument(
+        "--num-prompts",
+        "-n",
+        type=int,
+        default=None,
+        help="Run only the first N test entries of each category instead of "
+        "the full set. Implies --partial-eval.",
+    )
+    parser.add_argument(
         "--num-threads",
         type=int,
         default=32,
-        help="Threads for BFCL generation (default: 8)",
+        help="Threads for BFCL generation (default: 32)",
     )
     parser.add_argument(
         "--temperature",
@@ -94,6 +110,12 @@ def parse_args() -> argparse.Namespace:
         help="Only generate responses, do not score them",
     )
     parser.add_argument(
+        "--partial-eval",
+        action="store_true",
+        help="Score whatever entries exist in the result files instead of "
+        "failing on missing ids. Set automatically by --num-prompts.",
+    )
+    parser.add_argument(
         "--no-underscore-to-dot",
         action="store_true",
         help="Disable BFCL's underscore-to-dot function name conversion",
@@ -106,6 +128,10 @@ def parse_args() -> argparse.Namespace:
         categories.extend(c.strip() for c in chunk.split(",") if c.strip())
     args.test_category = categories
     args.base_url = args.base_url.rstrip("/")
+    if args.num_prompts is not None and args.num_prompts < 1:
+        parser.error("--num-prompts must be >= 1")
+    if args.num_prompts is not None:
+        args.partial_eval = True
     return args
 
 
@@ -141,9 +167,7 @@ def register_model(model: str, api_type: str, underscore_to_dot: bool) -> None:
     )
 
     handler = (
-        OpenAIResponsesHandler
-        if api_type == "responses"
-        else OpenAICompletionsHandler
+        OpenAIResponsesHandler if api_type == "responses" else OpenAICompletionsHandler
     )
 
     bfcl_model_config.MODEL_CONFIG_MAPPING[model] = ModelConfig(
@@ -158,6 +182,55 @@ def register_model(model: str, api_type: str, underscore_to_dot: bool) -> None:
         is_fc_model=True,
         underscore_to_dot=underscore_to_dot,
     )
+
+
+def write_test_id_subset(
+    categories: list[str], num_prompts: int, output_dir: str
+) -> str:
+    """Write BFCL's test_case_ids_to_generate.json for the first N entries.
+
+    BFCL only supports subsetting through an id file at the project root,
+    selected with generate's ``--run-ids``.
+
+    Args:
+        categories: Test categories or category groups from --test-category.
+        num_prompts: Number of entries to keep per expanded category.
+        output_dir: BFCL project root; the id file is written here.
+
+    Returns:
+        Path of the id file that was written.
+    """
+    from bfcl_eval.utils import (
+        is_memory_prereq,
+        load_dataset_entry,
+        parse_test_category_argument,
+    )
+
+    subset: dict[str, list[str]] = {}
+    for category in parse_test_category_argument(categories):
+        entries = load_dataset_entry(category)
+        by_id = {entry["id"]: entry for entry in entries}
+        selected = [
+            entry["id"] for entry in entries if not is_memory_prereq(entry["id"])
+        ][:num_prompts]
+
+        # Memory entries cannot run without their prerequisite conversations.
+        keep = set(selected)
+        pending = list(selected)
+        while pending:
+            entry = by_id.get(pending.pop(), {})
+            for dep in entry.get("depends_on", []):
+                if dep not in keep:
+                    keep.add(dep)
+                    pending.append(dep)
+
+        subset[category] = [entry["id"] for entry in entries if entry["id"] in keep]
+        print(f"  {category}: {len(subset[category])} of {len(entries)} entries")
+
+    path = os.path.join(output_dir, "test_case_ids_to_generate.json")
+    with open(path, "w") as id_file:
+        json.dump(subset, id_file, indent=2)
+    return path
 
 
 def default_kwargs(function) -> dict:
@@ -197,6 +270,8 @@ def main() -> int:
     print(f"API type:       {args.api_type}")
     print(f"Output dir:     {output_dir}")
     print(f"Test category:  {', '.join(args.test_category)}")
+    if args.num_prompts is not None:
+        print(f"Num prompts:    {args.num_prompts} per category")
     print(f"Num threads:    {args.num_threads}")
     print(f"Temperature:    {args.temperature}")
     print("=" * 44)
@@ -211,6 +286,11 @@ def main() -> int:
 
     from bfcl_eval.__main__ import evaluate, generate
 
+    if args.num_prompts is not None:
+        print(f"=== BFCL subset: first {args.num_prompts} entries per category ===")
+        id_file = write_test_id_subset(args.test_category, args.num_prompts, output_dir)
+        print(f"Test id file:   {id_file}")
+
     try:
         if not args.skip_generate:
             print(f"=== BFCL generate: model={model} ===")
@@ -220,6 +300,10 @@ def main() -> int:
             gen_kwargs["skip_server_setup"] = True
             gen_kwargs["num_threads"] = args.num_threads
             gen_kwargs["temperature"] = args.temperature
+            if args.num_prompts is not None:
+                # BFCL reads the ids from test_case_ids_to_generate.json and
+                # ignores --test-category when this is set.
+                gen_kwargs["run_ids"] = True
             generate(**gen_kwargs)
 
         if not args.skip_evaluate:
@@ -227,6 +311,8 @@ def main() -> int:
             eval_kwargs = default_kwargs(evaluate)
             eval_kwargs["model"] = [model]
             eval_kwargs["test_category"] = args.test_category
+            if args.partial_eval:
+                eval_kwargs["partial_eval"] = True
             evaluate(**eval_kwargs)
     finally:
         # filelock artifacts from BFCL's thread-safe writes
