@@ -38,13 +38,6 @@ RUN uv sync --frozen
 RUN mkdir -p /opt/kvv/vendor/logs /results \
     && chmod -R a+rwX /opt/kvv/cache /opt/kvv/vendor/logs /results
 
-# Point at the host's server by default; override with -e at run time.
-ENV KIMI_BASE_URL=http://localhost:8000/v1 \
-    KIMI_API_KEY=dummy \
-    INSPECT_LOG_DIR=/results/logs \
-    HF_HUB_OFFLINE=1 \
-    HF_DATASETS_OFFLINE=1
-
 WORKDIR /results
 ENTRYPOINT ["python", "/opt/kvv/vendor/eval.py"]
 CMD []
