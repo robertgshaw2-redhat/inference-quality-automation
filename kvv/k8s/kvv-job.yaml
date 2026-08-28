@@ -1,0 +1,64 @@
+# Kimi-Vendor-Verifier eval Job against an llm-d (or any OpenAI-compatible)
+# endpoint running in the cluster.
+#
+# Before applying, set:
+#   - image: where you pushed the kvv image (see kvv/README.md)
+#   - KIMI_BASE_URL: your llm-d gateway/service URL, including /v1
+#   - args: suites and flags for run_kvv_eval.py (run with --help for options)
+#
+# kubectl apply -f kvv-job.yaml
+# kubectl logs -f job/kvv-eval
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kvv-eval
+  labels:
+    app: kvv-eval
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: kvv-eval
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kvv
+          image: registry.example.com/kvv:latest
+          env:
+            - name: KIMI_BASE_URL
+              # llm-d inference gateway service, e.g.
+              # http://<gateway-svc>.<namespace>.svc.cluster.local:<port>/v1
+              value: http://llm-d-inference-gateway.llm-d.svc.cluster.local:80/v1
+            - name: KIMI_API_KEY
+              value: dummy
+              # For a real key, use a secret instead:
+              # valueFrom:
+              #   secretKeyRef:
+              #     name: kvv-api-key
+              #     key: api-key
+          args:
+            # Model is auto-detected from /v1/models when omitted.
+            # Default suites: params, tool_schema, k3_features, prompt_tokens
+            - --suites
+            - params,tool_schema,k3_features,prompt_tokens
+            # - --model
+            # - your-model-id
+            # - --thinking
+            # - --thinking-effort
+            # - high
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              memory: 8Gi
+          volumeMounts:
+            - name: results
+              mountPath: /results
+      volumes:
+        - name: results
+          emptyDir: {}
+          # To keep results after the pod is gone, use a PVC instead:
+          # persistentVolumeClaim:
+          #   claimName: kvv-results
