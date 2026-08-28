@@ -1,7 +1,6 @@
 url := env_var_or_default("URL", "http://localhost:8000")
 model := env_var_or_default("MODEL", "meta-models/Muse-Glimmer-30B")
 bfcl_image := env_var_or_default("BFCL_IMAGE", "quay.io/rh-ee-robshaw/bfcl:latest")
-bfcl_inspect_image := env_var_or_default("BFCL_INSPECT_IMAGE", "quay.io/rh-ee-robshaw/bfcl-inspect:latest")
 kvv_image := env_var_or_default("KVV_IMAGE", "quay.io/rh-ee-robshaw/kvv:test")
 
 
@@ -10,22 +9,29 @@ bfcl:
 	-v "$PWD/bfcl-results:/results:Z" \
 	{{bfcl_image}} --model {{model}}
 
-bfcl-inspect-build:
-	docker build -t {{bfcl_inspect_image}} bfcl-inspect/
-
-# BFCL v3 multi-turn via Inspect AI; args go straight to run_bfcl_inspect.py.
-# e.g. just bfcl-inspect --num-prompts 5
-bfcl-inspect *args="":
+# BFCL v3 multi-turn via Inspect AI (inspect_evals/bfcl inside the kvv image).
+bfcl-no-thinking:
 	docker run --rm --network host \
-	-v "$PWD/bfcl-inspect-results:/results:Z" \
-	{{bfcl_inspect_image}} --base-url {{url}}/v1 --model {{model}} {{args}}
+	-v "$PWD/kvv-results:/results:Z" \
+	-e KIMI_BASE_URL={{url}}/v1 \
+	-e KIMI_API_KEY=dummy \
+	{{kvv_image}} bfcl \
+		--model opensource/{{model}} \
+		--think-mode opensource \
+		--max-tokens 4096 \
+		--temperature 0.0 \
+		--stream \
+		--display plain
 
-bfcl-inspect-local *args="":
-	python3 bfcl-inspect/run_bfcl_inspect.py \
-		--base-url {{url}}/v1 \
-		--model {{model}} \
-		--output-dir ./bfcl-inspect-results \
-		{{args}}
+bfcl-no-thinking-local:
+	export KIMI_BASE_URL={{url}}/v1 && \
+	export KIMI_API_KEY=dummy && \
+	python3 kvv/vendor/eval.py bfcl \
+		--model opensource/{{model}} \
+		--think-mode opensource \
+		--max-tokens 4096 \
+		--temperature 0.0 \
+		--display plain
 
 kvv-build:
 	docker build -t {{kvv_image}} kvv/
