@@ -15,7 +15,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
+import httpx2
 from openai import BadRequestError, OpenAI
 
 
@@ -40,7 +40,7 @@ def get_client(base_url: str, api_key: str) -> OpenAI:
     return OpenAI(
         base_url=base_url,
         api_key=api_key,
-        http_client=httpx.Client(timeout=60.0),
+        http_client=httpx2.Client(timeout=60.0),
     )
 
 

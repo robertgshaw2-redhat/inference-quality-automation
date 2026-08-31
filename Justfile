@@ -13,6 +13,30 @@ gsm8k_image := env_var_or_default("GSM8K_IMAGE", "quay.io/rh-ee-robshaw/gsm8k:la
 bfcl-build:
 	docker build --ulimit nofile=65536:65536 -t {{bfcl_image}} bfcl/
 
+# BFCL v3 multi-turn via Inspect AI (inspect_evals/bfcl inside the kvv image).
+bfcl-no-thinking:
+	docker run --rm --network host \
+	-v "$PWD/kvv-results:/results:Z" \
+	-e KIMI_BASE_URL={{url}}/v1 \
+	-e KIMI_API_KEY=dummy \
+	{{kvv_image}} bfcl \
+		--model opensource/{{model}} \
+		--think-mode opensource \
+		--max-tokens 4096 \
+		--temperature 0.0 \
+		--stream \
+		--display plain
+
+bfcl-no-thinking-local:
+	export KIMI_BASE_URL={{url}}/v1 && \
+	export KIMI_API_KEY=dummy && \
+	python3 kvv/vendor/eval.py bfcl \
+		--model opensource/{{model}} \
+		--think-mode opensource \
+		--max-tokens 4096 \
+		--temperature 0.0 \
+		--display plain
+
 kvv-build:
 	docker build --ulimit nofile=65536:65536 -t {{kvv_image}} kvv/
 
