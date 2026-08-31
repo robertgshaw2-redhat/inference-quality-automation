@@ -6,9 +6,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-import httpx
-from httpcore import ReadError as HttpcoreReadError
-from httpcore import RemoteProtocolError
+# openai>=3 (required by inspect-ai>=0.3.258) runs on the httpx2/httpcore2
+# line, so the client and the raw stream errors we retry on must match.
+import httpx2
+from httpcore2 import ReadError as HttpcoreReadError
+from httpcore2 import RemoteProtocolError
 from openai import APIConnectionError, APIStatusError, RateLimitError
 from openai.types.chat import (
     ChatCompletion,
@@ -26,13 +28,13 @@ from inspect_ai.model._openai import messages_to_openai as _messages_to_openai
 from inspect_ai.model._providers.openai_compatible import OpenAICompatibleAPI
 
 # Unlimited read timeout for thinking mode (model may think for a long time)
-STREAM_TIMEOUT = httpx.Timeout(timeout=None, connect=60.0)
+STREAM_TIMEOUT = httpx2.Timeout(timeout=None, connect=60.0)
 
 RETRYABLE_READ_ERRORS = (
     HttpcoreReadError,
     RemoteProtocolError,
-    httpx.ReadError,
-    httpx.RemoteProtocolError,
+    httpx2.ReadError,
+    httpx2.RemoteProtocolError,
 )
 
 
@@ -122,7 +124,7 @@ class KimiAPI(OpenAICompatibleAPI):
             model_args.setdefault("default_headers", {})
             model_args["default_headers"] = {"X-Msh-Internal-Certain-Provider": certain_provider}
         if "http_client" not in model_args:
-            model_args["http_client"] = httpx.AsyncClient(
+            model_args["http_client"] = httpx2.AsyncClient(
                 timeout=STREAM_TIMEOUT,
                 # http2=True,
             )
