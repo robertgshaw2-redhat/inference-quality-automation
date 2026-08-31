@@ -26,6 +26,8 @@ MULTI_TURN_CATEGORIES = [
 @task
 def bfcl_multi_turn(
     categories: str | list[str] = MULTI_TURN_CATEGORIES,
+    message_limit: int | None = 300,
+    time_limit: int | None = 3600,
 ) -> Task:
     """BFCL multi-turn evaluation.
 
@@ -33,7 +35,20 @@ def bfcl_multi_turn(
         categories: inspect_evals/bfcl category names; a list or a
             comma-separated string. Defaults to the four BFCL v3
             multi-turn categories (200 conversations each).
+        message_limit: Per-sample cap on conversation length. The
+            inspect_evals solver runs generate(tool_calls="loop") with no
+            step cap (upstream BFCL stops after 20 steps per turn), so a
+            model stuck re-issuing tool calls otherwise loops with an
+            ever-growing context. A limited sample is scored on the turns
+            it completed, matching upstream's forced termination. 300
+            comfortably covers legitimate trajectories (median ~4 user
+            turns, a handful of tool calls each).
+        time_limit: Per-sample wall-clock cap in seconds, bounding hangs
+            (the client's streaming read timeout is unlimited).
     """
     if isinstance(categories, str):
         categories = [c.strip() for c in categories.split(",") if c.strip()]
-    return bfcl(categories=list(categories))
+    bfcl_task = bfcl(categories=list(categories))
+    bfcl_task.message_limit = message_limit
+    bfcl_task.time_limit = time_limit
+    return bfcl_task
