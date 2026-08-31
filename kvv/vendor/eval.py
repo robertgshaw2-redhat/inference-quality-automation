@@ -4,6 +4,7 @@ from inspect_ai import eval
 
 from aime2025 import aime2025
 from bfcl_multi_turn import bfcl_multi_turn
+from gsm8k import gsm8k
 from mmmu_pro_vision import mmmu_pro_10c
 from ocr_bench import ocrbench
 
@@ -16,6 +17,7 @@ BENCHMARKS = {
     "mmmu": mmmu_pro_10c,
     "aime2025": aime2025,
     "bfcl": bfcl_multi_turn,
+    "gsm8k": gsm8k,
 }
 
 # Default configs per benchmark (max_connections, epochs)
@@ -24,6 +26,7 @@ BENCH_CONFIGS = {
     "mmmu": {"max_connections": 50, "epochs": 1},
     "aime2025": {"max_connections": 50, "epochs": 32},
     "bfcl": {"max_connections": 32, "epochs": 1},
+    "gsm8k": {"max_connections": 50, "epochs": 1},
 }
 
 
