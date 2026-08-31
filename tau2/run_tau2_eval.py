@@ -89,6 +89,13 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         "(e.g. gpt-4.1 with a real OPENAI_API_KEY).",
     )
     parser.add_argument(
+        "--nl-judge-llm",
+        default=None,
+        help="LiteLLM model for the NL-assertion judge. Default: the same "
+        "local model being evaluated. tau2 hardcodes gpt-4.1-2025-04-14 here "
+        "and offers no flag for it, which 404s against a local server.",
+    )
+    parser.add_argument(
         "--temperature",
         type=float,
         default=0.0,
@@ -213,13 +220,30 @@ def install_zero_cost_fallback() -> None:
     llm_utils.completion_cost = completion_cost
 
 
-def run_tau2(command: list[str], models: list[str]) -> int:
+def override_nl_assertions_judge(model: str) -> None:
+    """Point tau2's NL-assertion judge at `model`.
+
+    Tasks whose reward_basis includes NL_ASSERTION (most retail/airline ones)
+    are graded by an LLM judge that tau2 hardcodes to config's
+    DEFAULT_LLM_NL_ASSERTIONS = "gpt-4.1-2025-04-14", with no CLI flag to
+    change it. OPENAI_BASE_URL points at the local server, so that name is
+    sent there and the server 404s ("The model `gpt-4.1-2025-04-14` does not
+    exist"), failing the whole task. The judge reads the name as a module
+    global at call time, so rebinding it here redirects the judge.
+    """
+    from tau2.evaluator import evaluator_nl_assertions
+
+    evaluator_nl_assertions.DEFAULT_LLM_NL_ASSERTIONS = model
+
+
+def run_tau2(command: list[str], models: list[str], nl_judge_llm: str) -> int:
     """Run tau2's CLI in this process so the cost registration above applies."""
     register_local_model_cost(*models)
 
     from tau2.cli import main as tau2_main
 
     install_zero_cost_fallback()
+    override_nl_assertions_judge(nl_judge_llm)
 
     argv = sys.argv
     sys.argv = command
@@ -241,6 +265,7 @@ def main() -> int:
     # the base URL and key are picked up from the environment below.
     agent_llm = model if model.startswith("openai/") else f"openai/{model}"
     user_llm = args.user_llm or agent_llm
+    nl_judge_llm = args.nl_judge_llm or agent_llm
 
     os.environ["OPENAI_API_KEY"] = args.api_key
     os.environ["OPENAI_BASE_URL"] = args.base_url
@@ -255,6 +280,7 @@ def main() -> int:
     print(f"Base URL:        {args.base_url}")
     print(f"Agent LLM:       {agent_llm}")
     print(f"User sim LLM:    {user_llm}")
+    print(f"NL judge LLM:    {nl_judge_llm}")
     print(f"Domain:          {args.domain}")
     print(f"Num tasks:       {args.num_tasks if args.num_tasks else 'all'}")
     print(f"Num trials:      {args.num_trials}")
@@ -282,7 +308,7 @@ def main() -> int:
 
     # Only the ones LiteLLM can't already price get registered, so passing a
     # hosted --user-llm (e.g. gpt-4.1) here keeps its real pricing.
-    returncode = run_tau2(command, [agent_llm, user_llm])
+    returncode = run_tau2(command, [agent_llm, user_llm, nl_judge_llm], nl_judge_llm)
     if returncode != 0:
         print(f"ERROR: tau2 run exited with code {returncode}")
         return returncode
