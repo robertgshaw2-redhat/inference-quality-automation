@@ -19,10 +19,22 @@ RUN git init /opt/tau2-bench \
     && git -C /opt/tau2-bench checkout --detach FETCH_HEAD \
     && uv pip install --system /opt/tau2-bench
 
-ENV TAU2_DATA_DIR=/opt/tau2-bench/data
+ENV TAU2_DATA_DIR=/opt/tau2-bench/data \
+    HOME=/tmp
+
+COPY run_tau2_eval.py /opt/tau2/run_tau2_eval.py
+
+# OpenShift runs as an arbitrary UID in group 0:
+# - pre-create the /results symlink so the runtime never needs to write into the image
+# - make the data dir group-0 writable with group perms mirroring owner perms
+RUN mkdir -p /results \
+    && ln -s /results ${TAU2_DATA_DIR}/simulations \
+    && chgrp -R 0 ${TAU2_DATA_DIR} /results \
+    && chmod -R g=u ${TAU2_DATA_DIR} /results
 
 WORKDIR /results
-COPY run_tau2_eval.py /opt/tau2/run_tau2_eval.py
+
+USER 1001
 
 ENTRYPOINT ["python", "/opt/tau2/run_tau2_eval.py", "--output-dir", "/results"]
 CMD []

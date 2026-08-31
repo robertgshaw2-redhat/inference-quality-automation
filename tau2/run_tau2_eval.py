@@ -34,7 +34,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -160,6 +159,79 @@ def link_output_dir(output_dir: str) -> None:
     simulations.symlink_to(target)
 
 
+def register_local_model_cost(*models: str) -> None:
+    """Tell LiteLLM the locally served models are free.
+
+    After every request tau2 calls litellm.completion_cost(), which raises
+    for any model missing from LiteLLM's public price map ("This model isn't
+    mapped yet..."); tau2 logs that exception at ERROR once per call. A model
+    served locally has no per-token price, so register it at zero cost. Models
+    LiteLLM already knows about are left alone so real pricing still applies.
+    """
+    import litellm
+
+    entries = {}
+    for model in models:
+        bare = model.split("/", 1)[1] if model.startswith("openai/") else model
+        for key in (model, bare):
+            if key not in litellm.model_cost:
+                entries[key] = {
+                    "input_cost_per_token": 0.0,
+                    "output_cost_per_token": 0.0,
+                    "litellm_provider": "openai",
+                    "mode": "chat",
+                }
+    if entries:
+        litellm.register_model(entries)
+
+
+def install_zero_cost_fallback() -> None:
+    """Price any still-unmapped model at zero instead of logging an error.
+
+    tau2 prices a response by the model id the *server* echoed back, which a
+    server is free to report differently from the name we requested (an alias,
+    a checkpoint path, ...), so pre-registering the names we pass in does not
+    always cover it. Anything LiteLLM still can't price here is the local
+    server's model, i.e. free: register it so later calls hit the price map,
+    and report zero for this one rather than letting tau2 log the exception.
+    """
+    from tau2.utils import llm_utils
+
+    litellm_completion_cost = llm_utils.completion_cost
+
+    def completion_cost(*args, **kwargs):
+        try:
+            return litellm_completion_cost(*args, **kwargs)
+        except Exception:
+            response = kwargs.get("completion_response") or (args[0] if args else None)
+            model = getattr(response, "model", None)
+            if model is None:
+                raise
+            register_local_model_cost(model)
+            return 0.0
+
+    llm_utils.completion_cost = completion_cost
+
+
+def run_tau2(command: list[str], models: list[str]) -> int:
+    """Run tau2's CLI in this process so the cost registration above applies."""
+    register_local_model_cost(*models)
+
+    from tau2.cli import main as tau2_main
+
+    install_zero_cost_fallback()
+
+    argv = sys.argv
+    sys.argv = command
+    try:
+        tau2_main()
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+    finally:
+        sys.argv = argv
+    return 0
+
+
 def main() -> int:
     args, extra_args = parse_args()
     args.base_url = args.base_url.rstrip("/")
@@ -208,10 +280,12 @@ def main() -> int:
         command += ["--save-to", args.save_to]
     command += extra_args
 
-    result = subprocess.run(command)
-    if result.returncode != 0:
-        print(f"ERROR: tau2 run exited with code {result.returncode}")
-        return result.returncode
+    # Only the ones LiteLLM can't already price get registered, so passing a
+    # hosted --user-llm (e.g. gpt-4.1) here keeps its real pricing.
+    returncode = run_tau2(command, [agent_llm, user_llm])
+    if returncode != 0:
+        print(f"ERROR: tau2 run exited with code {returncode}")
+        return returncode
 
     print("=== tau2 evaluation completed successfully ===")
     if args.output_dir:
