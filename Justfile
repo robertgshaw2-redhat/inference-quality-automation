@@ -1,5 +1,6 @@
 url := env_var_or_default("URL", "http://localhost:8000")
-model := env_var_or_default("MODEL", "meta-models/Muse-Glimmer-30B")
+# model := env_var_or_default("MODEL", "meta-models/Muse-Glimmer-30B")
+model := env_var_or_default("MODEL", "google/gemma-4-12B-it")
 bfcl_image := env_var_or_default("BFCL_IMAGE", "quay.io/rh-ee-robshaw/bfcl:latest")
 kvv_image := env_var_or_default("KVV_IMAGE", "quay.io/rh-ee-robshaw/kvv:test")
 tau2_image := env_var_or_default("TAU2_IMAGE", "quay.io/rh-ee-robshaw/tau2:latest")
