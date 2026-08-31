@@ -1,7 +1,7 @@
 """Materialize benchmark datasets into the image so evals can run offline.
 
 Run at image build time. Warms the caches the benchmarks read from:
-`inspect_ai`'s `hf_dataset` disk cache (aime2025, ocrbench), the
+`inspect_ai`'s `hf_dataset` disk cache (aime2025, gsm8k, ocrbench), the
 `datasets` cache (mmmu, which calls `load_dataset` directly), and
 `inspect_evals`' cache (bfcl).
 """
@@ -9,7 +9,7 @@ Run at image build time. Warms the caches the benchmarks read from:
 import argparse
 import sys
 
-BENCHMARKS = ("aime2025", "ocrbench", "mmmu", "bfcl")
+BENCHMARKS = ("aime2025", "ocrbench", "mmmu", "bfcl", "gsm8k")
 
 
 def prefetch_aime2025() -> int:
@@ -40,11 +40,18 @@ def prefetch_bfcl() -> int:
     return len(bfcl_multi_turn().dataset)
 
 
+def prefetch_gsm8k() -> int:
+    from gsm8k import gsm8k
+
+    return len(gsm8k().dataset)
+
+
 PREFETCHERS = {
     "aime2025": prefetch_aime2025,
     "ocrbench": prefetch_ocrbench,
     "mmmu": prefetch_mmmu,
     "bfcl": prefetch_bfcl,
+    "gsm8k": prefetch_gsm8k,
 }
 
 

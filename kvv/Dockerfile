@@ -14,7 +14,7 @@ RUN uv sync --frozen --no-install-project
 ENV PATH="/opt/kvv/vendor/.venv/bin:$PATH"
 
 # Dataset caches live in the image so evals need no Hugging Face access at run
-# time. XDG_CACHE_HOME steers inspect_ai's hf_dataset cache (aime2025,
+# time. XDG_CACHE_HOME steers inspect_ai's hf_dataset cache (aime2025, gsm8k,
 # ocrbench) and inspect_evals' cache (bfcl); HF_HOME steers the datasets
 # cache (mmmu).
 ENV XDG_CACHE_HOME=/opt/kvv/cache \
@@ -23,13 +23,13 @@ ENV XDG_CACHE_HOME=/opt/kvv/cache \
 # Only the modules that define the datasets, so edits elsewhere don't force a
 # re-download of the (large) cache layer below.
 COPY vendor/aime2025.py vendor/ocr_bench.py vendor/mmmu_pro_vision.py \
-     vendor/bfcl_multi_turn.py vendor/prefetch_datasets.py ./
+     vendor/bfcl_multi_turn.py vendor/gsm8k.py vendor/prefetch_datasets.py ./
 
-# Space-separated subset of "aime2025 ocrbench mmmu bfcl". Trimming this
-# shrinks the image (mmmu ~700MB, ocrbench ~70MB, bfcl ~15MB, aime2025
-# negligible) at the cost of only being able to run the benchmarks that
+# Space-separated subset of "aime2025 ocrbench mmmu bfcl gsm8k". Trimming this
+# shrinks the image (mmmu ~700MB, ocrbench ~70MB, bfcl ~15MB, aime2025 and
+# gsm8k negligible) at the cost of only being able to run the benchmarks that
 # remain cached.
-ARG PREFETCH_BENCHMARKS="aime2025 ocrbench mmmu bfcl"
+ARG PREFETCH_BENCHMARKS="aime2025 ocrbench mmmu bfcl gsm8k"
 RUN python prefetch_datasets.py ${PREFETCH_BENCHMARKS}
 
 COPY vendor/ ./

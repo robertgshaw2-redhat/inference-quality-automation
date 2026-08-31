@@ -4,7 +4,6 @@ model := env_var_or_default("MODEL", "google/gemma-4-12B-it")
 bfcl_image := env_var_or_default("BFCL_IMAGE", "quay.io/rh-ee-robshaw/bfcl:latest")
 kvv_image := env_var_or_default("KVV_IMAGE", "quay.io/rh-ee-robshaw/kvv:test")
 tau2_image := env_var_or_default("TAU2_IMAGE", "quay.io/rh-ee-robshaw/tau2:latest")
-gsm8k_image := env_var_or_default("GSM8K_IMAGE", "quay.io/rh-ee-robshaw/gsm8k:latest")
 
 ############################################################
 # IMAGE BUILDER
@@ -43,9 +42,6 @@ kvv-build:
 tau2-build:
 	docker build --ulimit nofile=65536:65536 -t {{tau2_image}} tau2/
 
-gsm8k-build:
-	docker build --ulimit nofile=65536:65536 -t {{gsm8k_image}} gsm8k/
-
 fix-perms:
     docker run --rm -v "$PWD/tau2-results:/results" --entrypoint /bin/sh {{tau2_image}} -c "chown -R $(id -u):$(id -g) /results"
 
@@ -77,19 +73,39 @@ tau2-retail:
 # GSM8K
 ############################################################
 
-# Run GSM8K (grade-school math, Inspect AI harness) against the local
-# server; extra args go straight to run_gsm8k_eval.py.
-# e.g. just gsm8k --fewshot 0 --epochs 4
-gsm8k *args="":
-	docker run --rm --network host --user $(id -u):$(id -g) \
+# GSM8K grade-school math via Inspect AI inside the kvv image; extra args
+# go straight to eval.py (e.g. just gsm8k-no-thinking --limit 100 --epochs 4).
+gsm8k-no-thinking *args="":
+	docker run --rm --network host \
+	-e KIMI_BASE_URL="{{url}}/v1" \
+	-e KIMI_API_KEY="dummy" \
 	-v "$PWD/gsm8k-results:/results:Z" \
-	{{gsm8k_image}} --base-url {{url}}/v1 --model {{model}} {{args}}
+	{{kvv_image}} gsm8k \
+		--model opensource/{{model}} \
+		--think-mode opensource \
+		--max-tokens 8192 \
+		--temperature 0.0 \
+		--stream \
+		--display plain \
+		{{args}}
+
+gsm8k-thinking *args="":
+	docker run --rm --network host \
+	-e KIMI_BASE_URL="{{url}}/v1" \
+	-e KIMI_API_KEY="dummy" \
+	-v "$PWD/gsm8k-results:/results:Z" \
+	{{kvv_image}} gsm8k \
+		--model opensource/{{model}} \
+		--think-mode opensource \
+		--thinking \
+		--max-tokens 32768 \
+		--stream \
+		--display plain \
+		{{args}}
 
 # Quick smoke test: 10 problems.
 gsm8k-smoke:
-	docker run --rm --network host --user $(id -u):$(id -g) \
-	-v "$PWD/gsm8k-results:/results:Z" \
-	{{gsm8k_image}} --base-url {{url}}/v1 --model {{model}} --num-problems 10
+	just gsm8k-no-thinking --limit 10
 
 ############################################################
 # AIME2025
