@@ -5,6 +5,7 @@ bfcl_image := env_var_or_default("BFCL_IMAGE", "quay.io/rh-ee-robshaw/bfcl:lates
 kvv_image := env_var_or_default("KVV_IMAGE", "quay.io/rh-ee-robshaw/kvv:test")
 tau2_image := env_var_or_default("TAU2_IMAGE", "quay.io/rh-ee-robshaw/tau2:latest")
 gsm8k_image := env_var_or_default("GSM8K_IMAGE", "quay.io/rh-ee-robshaw/gsm8k:latest")
+terminalbench_image := env_var_or_default("TERMINALBENCH_IMAGE", "quay.io/rh-ee-robshaw/terminalbench:latest")
 
 ############################################################
 # IMAGE BUILDER
@@ -21,6 +22,9 @@ tau2-build:
 
 gsm8k-build:
 	docker build --ulimit nofile=65536:65536 -t {{gsm8k_image}} gsm8k/
+
+terminalbench-build:
+	docker build --ulimit nofile=65536:65536 -t {{terminalbench_image}} terminalbench/
 
 fix-perms:
     docker run --rm -v "$PWD/tau2-results:/results" --entrypoint /bin/sh {{tau2_image}} -c "chown -R $(id -u):$(id -g) /results"
@@ -66,6 +70,30 @@ gsm8k-smoke:
 	docker run --rm --network host --user $(id -u):$(id -g) \
 	-v "$PWD/gsm8k-results:/results:Z" \
 	{{gsm8k_image}} --base-url {{url}}/v1 --model {{model}} --num-problems 10
+
+############################################################
+# TERMINAL-BENCH 2.1
+############################################################
+
+# Run Terminal-Bench 2.1 (89 terminal tasks, Harbor harness) against the
+# local server; extra args go straight to run_terminalbench_eval.py (and
+# unknown ones on to `harbor run`). Harbor launches one container per task
+# on the HOST docker daemon through the mounted socket, which is why the
+# results dir is mounted at the same absolute path on both sides: harbor
+# bind-mounts trial dirs from it into the task containers, and those mounts
+# resolve on the host. e.g. just terminalbench --task hello-world
+terminalbench *args="":
+	mkdir -p terminalbench-results
+	docker run --rm --network host \
+	--user $(id -u):$(id -g) --group-add $(stat -c '%g' /var/run/docker.sock) \
+	-v /var/run/docker.sock:/var/run/docker.sock \
+	-v "$PWD/terminalbench-results:$PWD/terminalbench-results:z" \
+	{{terminalbench_image}} --base-url {{url}}/v1 --model {{model}} \
+	--jobs-dir "$PWD/terminalbench-results" {{args}}
+
+# Quick smoke test: 3 tasks, 2 at a time.
+terminalbench-smoke:
+	just terminalbench --n-tasks 3 --n-concurrent 2
 
 ############################################################
 # AIME2025
