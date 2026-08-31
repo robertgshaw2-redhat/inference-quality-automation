@@ -130,6 +130,14 @@ def parse_args() -> argparse.Namespace:
         help="Directory for Inspect AI eval logs (default: $INSPECT_LOG_DIR "
         "or ./logs)",
     )
+    parser.add_argument(
+        "--log-format",
+        choices=["eval", "json"],
+        default=os.environ.get("INSPECT_LOG_FORMAT", "eval"),
+        # inspect_ai only honours INSPECT_LOG_FORMAT in its own CLI; the
+        # Python eval() API hardcodes "eval", so read the env var ourselves.
+        help="Log file format (default: $INSPECT_LOG_FORMAT or eval)",
+    )
     return parser.parse_args()
 
 
@@ -252,6 +260,7 @@ def main() -> int:
         max_tokens=args.max_tokens,
         max_connections=args.max_connections,
         log_dir=args.log_dir,
+        log_format=args.log_format,
         display="plain",
     )
 

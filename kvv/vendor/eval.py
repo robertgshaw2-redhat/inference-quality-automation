@@ -1,9 +1,9 @@
-import argparse
+import argparse, os
 
 from inspect_ai import eval
 
 from aime2025 import aime2025
-from bfcl_multi_turn import bfcl_multi_turn
+from bfcl_multi_turn import MAXIMUM_STEP_LIMIT, bfcl_multi_turn
 from mmmu_pro_vision import mmmu_pro_10c
 from ocr_bench import ocrbench
 
@@ -72,14 +72,17 @@ def run_eval(
     top_p: float | None = None,
     thinking_effort: str | None = None,
     log_dir: str | None = None,
+    log_format: str | None = None,
     log_buffer: int | None = None,
     display: str | None = None,
     limit: int | None = None,
+    task_args: dict | None = None,
     **overrides,
 ):
     """Run a single benchmark evaluation."""
     task = BENCHMARKS[bench_name]
     config = BENCH_CONFIGS[bench_name]
+    task_args = task_args or {}
 
     max_connections = overrides.get("max_connections", config["max_connections"])
     epochs = overrides.get("epochs", config["epochs"])
@@ -93,6 +96,7 @@ def run_eval(
     print(f"temperature={temperature}, top_p={top_p}")
     print(f"thinking_effort={thinking_effort}")
     print(f"stream={stream}, extra_body={extra_body}")
+    print(f"task_args={task_args}")
     print(f"{'='*60}\n")
 
     print(f"{model=}")
@@ -100,6 +104,7 @@ def run_eval(
     eval(
         [task],
         [model],
+        task_args=task_args,
         max_tokens=max_tokens,
         max_connections=max_connections,
         epochs=epochs,
@@ -107,6 +112,7 @@ def run_eval(
         continue_on_fail=True,
         fail_on_error=False,
         log_dir=log_dir,
+        log_format=log_format,
         log_buffer=log_buffer,
         display=display,
         limit=limit,
@@ -204,9 +210,28 @@ def main():
         help="Run only the first N samples (smoke test; default: all)",
     )
     parser.add_argument(
+        "--step-limit",
+        type=int,
+        default=None,
+        help=(
+            "bfcl only: model generations allowed per user turn before the "
+            f"turn is force-quit (default: {MAXIMUM_STEP_LIMIT}, matching "
+            "official BFCL's MAXIMUM_STEP_LIMIT). 0 restores inspect_evals' "
+            "unbounded tool-calling loop."
+        ),
+    )
+    parser.add_argument(
         "--log-dir",
         default=None,
-        help="Directory for .eval logs (default: INSPECT_LOG_DIR or ./logs)",
+        help="Directory for eval logs (default: INSPECT_LOG_DIR or ./logs)",
+    )
+    parser.add_argument(
+        "--log-format",
+        choices=["eval", "json"],
+        default=os.environ.get("INSPECT_LOG_FORMAT", "eval"),
+        # inspect_ai only honours INSPECT_LOG_FORMAT in its own CLI; the
+        # Python eval() API hardcodes "eval", so read the env var ourselves.
+        help="Log file format (default: $INSPECT_LOG_FORMAT or eval)",
     )
     parser.add_argument(
         "--log-buffer",
@@ -228,6 +253,13 @@ def main():
     if args.epochs is not None:
         overrides["epochs"] = args.epochs
 
+    # --step-limit is a bfcl task arg; other tasks don't accept it.
+    task_args = {}
+    if args.step_limit is not None:
+        if args.bench != "bfcl":
+            parser.error("--step-limit only applies to the bfcl benchmark")
+        task_args["step_limit"] = args.step_limit
+
     run_eval(
         args.bench,
         args.model,
@@ -241,8 +273,10 @@ def main():
         args.thinking_effort,
         log_dir=args.log_dir,
         log_buffer=args.log_buffer,
+        log_format=args.log_format,
         display=args.display,
         limit=args.limit,
+        task_args=task_args,
         **overrides,
     )
 

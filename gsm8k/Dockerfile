@@ -17,6 +17,7 @@ RUN python -c "from datasets import load_dataset; load_dataset('openai/gsm8k', '
 ENV HF_HUB_OFFLINE=1
 
 ENV INSPECT_LOG_DIR=/results \
+    INSPECT_LOG_FORMAT=json \
     HOME=/tmp
 
 COPY run_gsm8k_eval.py /opt/gsm8k/run_gsm8k_eval.py
