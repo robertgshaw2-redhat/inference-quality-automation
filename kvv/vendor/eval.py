@@ -23,7 +23,11 @@ BENCH_CONFIGS = {
     "ocrbench": {"max_connections": 50, "epochs": 1},
     "mmmu": {"max_connections": 50, "epochs": 1},
     "aime2025": {"max_connections": 50, "epochs": 32},
-    "bfcl": {"max_connections": 32, "epochs": 1},
+    # Multi-turn samples issue one request at a time with client-side work
+    # (tool execution, scoring, message building) between turns, so the
+    # server only ever sees a fraction of the samples in flight at once.
+    # Oversubscribe ~4x to keep ~32 requests running server-side.
+    "bfcl": {"max_connections": 128, "epochs": 1},
 }
 
 
