@@ -22,9 +22,6 @@ tau2-build:
 gsm8k-build:
 	docker build --ulimit nofile=65536:65536 -t {{gsm8k_image}} gsm8k/
 
-fix-perms:
-    docker run --rm -v "$PWD/tau2-results:/results" --entrypoint /bin/sh {{tau2_image}} -c "chown -R $(id -u):$(id -g) /results"
-
 ############################################################
 # TAU2
 ############################################################
@@ -55,17 +52,11 @@ tau2-retail:
 
 # Run GSM8K (grade-school math, Inspect AI harness) against the local
 # server; extra args go straight to run_gsm8k_eval.py.
-# e.g. just gsm8k --fewshot 0 --epochs 4
 gsm8k *args="":
-	docker run --rm --network host --user $(id -u):$(id -g) \
+	mkdir -p gsm8k-results
+	docker run --rm --network host --user $(id -u):$(id -g) --group-add 0 \
 	-v "$PWD/gsm8k-results:/results:Z" \
 	{{gsm8k_image}} --base-url {{url}}/v1 --model {{model}} {{args}}
-
-# Quick smoke test: 10 problems.
-gsm8k-smoke:
-	docker run --rm --network host --user $(id -u):$(id -g) \
-	-v "$PWD/gsm8k-results:/results:Z" \
-	{{gsm8k_image}} --base-url {{url}}/v1 --model {{model}} --num-problems 10
 
 ############################################################
 # AIME2025

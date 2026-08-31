@@ -8,7 +8,7 @@ ENV UV_SYSTEM_PYTHON=1 \
 
 # openai is an optional inspect-ai dependency, required by its
 # OpenAI-compatible model provider.
-RUN uv pip install --system "inspect-ai>=0.3.261,<0.4" "datasets>=3,<6" "openai>=1,<3"
+RUN uv pip install --system "inspect-ai>=0.3.261,<0.4" "datasets>=3,<6" "openai>=3.1,<4"
 
 # Bake the GSM8K dataset into the image so runs don't need Hugging Face
 # access; HF_HUB_OFFLINE keeps runtime loads on the baked cache.

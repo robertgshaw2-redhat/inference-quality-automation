@@ -121,7 +121,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-connections",
         type=int,
-        default=32,
+        default=100,
         help="Concurrent requests to the server (default: 32)",
     )
     parser.add_argument(
