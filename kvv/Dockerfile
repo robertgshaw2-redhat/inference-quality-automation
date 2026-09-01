@@ -29,13 +29,15 @@ ENV XDG_CACHE_HOME=/opt/kvv/cache \
 # Only the modules that define the datasets, so edits elsewhere don't force a
 # re-download of the (large) cache layer below.
 COPY vendor/aime2025.py vendor/ocr_bench.py vendor/mmmu_pro_vision.py \
-     vendor/bfcl_multi_turn.py vendor/gsm8k.py vendor/prefetch_datasets.py ./
+     vendor/bfcl_multi_turn.py vendor/gsm8k.py vendor/gpqa_diamond.py \
+     vendor/prefetch_datasets.py ./
 
-# Space-separated subset of "aime2025 ocrbench mmmu bfcl gsm8k". Trimming this
-# shrinks the image (mmmu ~700MB, ocrbench ~70MB, bfcl ~15MB, aime2025 and
-# gsm8k negligible) at the cost of only being able to run the benchmarks that
-# remain cached.
-ARG PREFETCH_BENCHMARKS="aime2025 ocrbench mmmu bfcl gsm8k"
+# Space-separated subset of "aime2025 ocrbench mmmu bfcl gsm8k gpqa". Trimming
+# this shrinks the image (mmmu ~700MB, ocrbench ~70MB, bfcl ~15MB, aime2025,
+# gsm8k, and gpqa negligible) at the cost of only being able to run the
+# benchmarks that remain cached. gpqa is a gated HF dataset: accept its terms
+# and pass HF_TOKEN as a build secret/arg if prefetching it.
+ARG PREFETCH_BENCHMARKS="aime2025 ocrbench mmmu bfcl gsm8k gpqa"
 # RUN python prefetch_datasets.py ${PREFETCH_BENCHMARKS}
 
 COPY vendor/ ./

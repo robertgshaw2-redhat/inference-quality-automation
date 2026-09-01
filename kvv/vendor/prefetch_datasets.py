@@ -9,7 +9,7 @@ Run at image build time. Warms the caches the benchmarks read from:
 import argparse
 import sys
 
-BENCHMARKS = ("aime2025", "ocrbench", "mmmu", "bfcl", "gsm8k")
+BENCHMARKS = ("aime2025", "ocrbench", "mmmu", "bfcl", "gsm8k", "gpqa")
 
 
 def prefetch_aime2025() -> int:
@@ -46,12 +46,19 @@ def prefetch_gsm8k() -> int:
     return len(gsm8k().dataset)
 
 
+def prefetch_gpqa() -> int:
+    from gpqa_diamond import gpqa_diamond
+
+    return len(gpqa_diamond().dataset)
+
+
 PREFETCHERS = {
     "aime2025": prefetch_aime2025,
     "ocrbench": prefetch_ocrbench,
     "mmmu": prefetch_mmmu,
     "bfcl": prefetch_bfcl,
     "gsm8k": prefetch_gsm8k,
+    "gpqa": prefetch_gpqa,
 }
 
 

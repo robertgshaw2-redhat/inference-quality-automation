@@ -109,6 +109,44 @@ aime-no-thinking epochs="1":
 
 
 ############################################################
+# GPQA DIAMOND
+############################################################
+
+# GPQA Diamond graduate-level science QA (198 questions, multiple choice);
+# extra args go straight to eval.py (e.g. just gpqa-thinking --epochs 4).
+gpqa-no-thinking *args="":
+	docker run --rm --network host \
+	-e KIMI_BASE_URL="{{url}}/v1" \
+	-e KIMI_API_KEY="dummy" \
+	-v "$PWD/gpqa-results:/results:Z" \
+	{{kvv_image}} gpqa \
+		--model opensource/{{model}} \
+		--think-mode opensource \
+		--max-tokens 16384 \
+		--temperature 0.0 \
+		--stream \
+		--display plain \
+		{{args}}
+
+gpqa-thinking *args="":
+	docker run --rm --network host \
+	-e KIMI_BASE_URL="{{url}}/v1" \
+	-e KIMI_API_KEY="dummy" \
+	-v "$PWD/gpqa-results:/results:Z" \
+	{{kvv_image}} gpqa \
+		--model opensource/{{model}} \
+		--think-mode opensource \
+		--thinking \
+		--max-tokens 65536 \
+		--stream \
+		--display plain \
+		{{args}}
+
+# Quick smoke test: 10 questions.
+gpqa-smoke:
+	just gpqa-no-thinking --limit 10
+
+############################################################
 # MMMU
 ############################################################
 
